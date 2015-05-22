@@ -5,7 +5,8 @@ var EventEmitter = require('events').EventEmitter
 var createSocket = dgram.createSocket // raw, use newSocket instead
 var SOCKET_EVENTS = ['message', 'listening', 'error', 'close']
 var PROXY_EVENTS = ['listening', 'error']
-var ports = {
+var ID = 0
+var SOCKETS = {
   udp4: {},
   udp6: {}
 }
@@ -29,9 +30,9 @@ function newSocket(options) {
 
 function Socket(options) {
   EventEmitter.call(this)
+  this._jackid = ID++
   this._type = typeof options === 'string' ? options : options.type
   this.setMaxListeners(0)
-  this._slisteners = newListenersCache()
   this._msgFilters = []
 }
 
@@ -39,8 +40,13 @@ util.inherits(Socket, EventEmitter)
 
 Socket.prototype.bind = function(port, host, cb) {
   var self = this
+
+  if (this._binding) throw new Error('already binding')
+
+  this._binding = true
+
   var socket
-  var typePorts = ports[this._type]
+  var typePorts = SOCKETS[this._type]
   if (typeof port === 'function') {
     cb = port
     port = null
@@ -73,17 +79,6 @@ Socket.prototype.bind = function(port, host, cb) {
   this.socket = socket
   this._handle = socket._handle
 
-  // PROXY_EVENTS.forEach(function(e) {
-  //   self.socket.on(e, listener)
-  //   self._slisteners[e] = [list].push([e, listener])
-
-  //   function listener() {
-  //     var args = [].slice.call(arguments)
-  //     args.unshift(e)
-  //     self.emit.apply(self, args)
-  //   }
-  // })
-
   socket.once('close', function() {
     delete typePorts[self._port]
   })
@@ -101,6 +96,7 @@ Socket.prototype.bind = function(port, host, cb) {
       }
     }
 
+    if (typePorts[port].wrappers.indexOf(self) !== -1) debugger
     typePorts[port].wrappers.push(self)
     process.nextTick(self.emit.bind(self, 'listening'))
   }
@@ -109,7 +105,9 @@ Socket.prototype.bind = function(port, host, cb) {
 Socket.prototype.close =  function() {
   var self = this
 
-  var cached = ports[this._type][this._port]
+  this._closing = true
+
+  var cached = SOCKETS[this._type][this._port]
   if (cached) {
     cached.wrappers.splice(cached.wrappers.indexOf(this), 1)
     if (!cached.wrappers.length) cached.socket.close()
@@ -120,15 +118,6 @@ Socket.prototype.close =  function() {
     delete self.socket
     self.emit('close')
   })
-
-  for (var event in cached.listeners) {
-    var listeners = cached.listeners[event]
-    for (var i = 0; i < listeners.length; i++) {
-      this.socket.removeListener(event, listeners[i])
-    }
-  }
-
-  delete this._slisteners
 }
 
 Socket.prototype.send = function() {
@@ -146,9 +135,11 @@ Socket.prototype.send = function() {
 }
 
 Socket.prototype._maybeEmit = function(event /*,... args */) {
-  if (event !== 'message' || this._filterMessages(arguments[1], arguments[2])) {
-    return this.emit.apply(this, arguments)
+  if (event === 'message') {
+    if (this._closing || !this._filterMessages(arguments[1], arguments[2])) return
   }
+
+  return this.emit.apply(this, arguments)
 }
 
 Socket.prototype.filterMessages = function(filter) {
@@ -171,11 +162,8 @@ function bindEvents(socket) {
   ['message', 'error'].forEach(function(event) {
     var method = event === 'close' ? 'once' : 'on'
     socket[method](event, function() {
-      var cached = ports[socket.type][socket.address().port]
-      // if (!cached) {
-      //   console.log('cache not found', event)
-      //   return
-      // }
+      var cached = SOCKETS[socket.type][socket.address().port]
+      if (!cached) throw new Error('missing socket wrapper')
 
       var args = [].slice.call(arguments)
       args.unshift(event)
@@ -195,3 +183,15 @@ function newListenersCache() {
 
   return cache
 }
+
+// setInterval(function() {
+//   for (var type in SOCKETS) {
+//     var byType = SOCKETS[type]
+//     for (var port in byType) {
+//       var cache = byType[port]
+//       console.log(cache.wrappers.length, 'wrappers left for', port, cache.wrappers.map(function(w) {
+//         return w._jackid
+//       }).join(', '))
+//     }
+//   }
+// }, 2000)
