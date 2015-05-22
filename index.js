@@ -2,23 +2,37 @@
 var dgram = require('dgram')
 var util = require('util')
 var EventEmitter = require('events').EventEmitter
-var createSocket = dgram.createSocket
-var SOCKET_EVENTS = ['message', 'listening', 'error']
+var createSocket = dgram.createSocket // raw, use newSocket instead
+var SOCKET_EVENTS = ['message', 'listening', 'error', 'close']
+var PROXY_EVENTS = ['listening', 'error']
 var ports = {
   udp4: {},
   udp6: {}
 }
 
-var createSocket = dgram.createSocket
-dgram.createSocket = function(options) {
-  return new Socket(options)
+if (!dgram.__sockjacked) hijack()
+
+function hijack() {
+  dgram.__sockjacked = true
+  var createSocket = dgram.createSocket
+
+  dgram.createSocket = function(options) {
+    return new Socket(options)
+  }
+}
+
+function newSocket(options) {
+  var socket = createSocket(options)
+  bindEvents(socket)
+  return socket
 }
 
 function Socket(options) {
   EventEmitter.call(this)
   this._type = typeof options === 'string' ? options : options.type
-  this._slisteners = []
   this.setMaxListeners(0)
+  this._slisteners = newListenersCache()
+  this._msgFilters = []
 }
 
 util.inherits(Socket, EventEmitter)
@@ -27,13 +41,18 @@ Socket.prototype.bind = function(port, host, cb) {
   var self = this
   var socket
   var typePorts = ports[this._type]
-  if (typeof host === 'function') {
+  if (typeof port === 'function') {
+    cb = port
+    port = null
+    host = null
+  }
+  else if (typeof host === 'function') {
     cb = host
     host = null
   }
 
   if (!port) {
-    socket = createSocket(this._type)
+    socket = newSocket(this._type)
     socket.once('listening', onPortKnown)
     socket.bind()
   }
@@ -41,10 +60,9 @@ Socket.prototype.bind = function(port, host, cb) {
     var cached = typePorts[port]
     if (cached) {
       socket = cached.socket
-      process.nextTick(this.emit.bind(this, 'listening'))
     }
     else {
-      socket = createSocket(this._type)
+      socket = newSocket(this._type)
       socket.bind(port, host)
     }
 
@@ -55,16 +73,16 @@ Socket.prototype.bind = function(port, host, cb) {
   this.socket = socket
   this._handle = socket._handle
 
-  SOCKET_EVENTS.forEach(function(e) {
-    self.socket.on(e, listener)
-    self._slisteners.push([e, listener])
+  // PROXY_EVENTS.forEach(function(e) {
+  //   self.socket.on(e, listener)
+  //   self._slisteners[e] = [list].push([e, listener])
 
-    function listener() {
-      var args = [].slice.call(arguments)
-      args.unshift(e)
-      self.emit.apply(self, args)
-    }
-  })
+  //   function listener() {
+  //     var args = [].slice.call(arguments)
+  //     args.unshift(e)
+  //     self.emit.apply(self, args)
+  //   }
+  // })
 
   socket.once('close', function() {
     delete typePorts[self._port]
@@ -76,12 +94,15 @@ Socket.prototype.bind = function(port, host, cb) {
     if (typeof port === 'undefined') port = socket.address().port
 
     self._port = port
-    typePorts[port] = typePorts[port] || {
-      socket: socket,
-      wrappers: []
+    if (!typePorts[port]) {
+      typePorts[port] = {
+        socket: socket,
+        wrappers: []
+      }
     }
 
     typePorts[port].wrappers.push(self)
+    process.nextTick(self.emit.bind(self, 'listening'))
   }
 }
 
@@ -100,23 +121,44 @@ Socket.prototype.close =  function() {
     self.emit('close')
   })
 
-  this._slisteners.forEach(function(pair) {
-    self.socket.removeListener(pair[0], pair[1])
-  })
+  for (var event in cached.listeners) {
+    var listeners = cached.listeners[event]
+    for (var i = 0; i < listeners.length; i++) {
+      this.socket.removeListener(event, listeners[i])
+    }
+  }
 
-  this._slisteners.length = 0
+  delete this._slisteners
 }
 
 Socket.prototype.send = function() {
   var self = this
+  var args = arguments
   if (!this._port) {
     this.bind()
-    var args = arguments
     this.once('listening', function() {
       self.socket.send.apply(self.socket, args)
     })
   }
-  else this.socket.send.apply(this.socket, arguments)
+  else {
+    this.socket.send.apply(this.socket, args)
+  }
+}
+
+Socket.prototype._maybeEmit = function(event /*,... args */) {
+  if (event !== 'message' || this._filterMessages(arguments[1], arguments[2])) {
+    return this.emit.apply(this, arguments)
+  }
+}
+
+Socket.prototype.filterMessages = function(filter) {
+  this._msgFilters.push(filter)
+}
+
+Socket.prototype._filterMessages = function(msg, rinfo) {
+  return !this._msgFilters.length || this._msgFilters.some(function(filter) {
+    return filter(msg, rinfo)
+  })
 }
 
 ;['address'].forEach(function(method) {
@@ -124,3 +166,32 @@ Socket.prototype.send = function() {
     return this.socket[method].apply(this.socket, arguments)
   }
 })
+
+function bindEvents(socket) {
+  ['message', 'error'].forEach(function(event) {
+    var method = event === 'close' ? 'once' : 'on'
+    socket[method](event, function() {
+      var cached = ports[socket.type][socket.address().port]
+      // if (!cached) {
+      //   console.log('cache not found', event)
+      //   return
+      // }
+
+      var args = [].slice.call(arguments)
+      args.unshift(event)
+      cached.wrappers.forEach(function(wrapper) {
+        wrapper._maybeEmit.apply(wrapper, args)
+      })
+    })
+  })
+}
+
+function newListenersCache() {
+  var cache = Object.create(null)
+
+  SOCKET_EVENTS.forEach(function(e) {
+    cache[e] = []
+  })
+
+  return cache
+}
