@@ -11,6 +11,8 @@ var SOCKETS = {
   udp6: {}
 }
 
+var UNDEF = []
+
 if (!dgram.__sockjacked) hijack()
 
 function hijack() {
@@ -34,6 +36,7 @@ function Socket(options) {
   this._type = typeof options === 'string' ? options : options.type
   this.setMaxListeners(0)
   this._msgFilters = []
+  UNDEF.push(this)
 }
 
 util.inherits(Socket, EventEmitter)
@@ -96,7 +99,9 @@ Socket.prototype.bind = function(port, host, cb) {
       }
     }
 
-    if (typePorts[port].wrappers.indexOf(self) !== -1) debugger
+    var idx = UNDEF.indexOf(self)
+    if (idx !== -1) UNDEF.splice(idx, 1)
+
     typePorts[port].wrappers.push(self)
     process.nextTick(self.emit.bind(self, 'listening'))
   }
@@ -162,12 +167,41 @@ function bindEvents(socket) {
   ['message', 'error'].forEach(function(event) {
     var method = event === 'close' ? 'once' : 'on'
     socket[method](event, function() {
-      var cached = SOCKETS[socket.type][socket.address().port]
-      if (!cached) throw new Error('missing socket wrapper')
+      var wrappers
+      var port
+      try {
+        port = socket.address().port
+        var cached = SOCKETS[socket.type][port]
+        if (!cached) throw new Error('missing socket wrapper')
+
+        wrappers = cached.wrappers
+      } catch (err) {
+        var cached = SOCKETS[socket.type]
+        for (var port in cached) {
+          var sw = cached[port].wrappers
+          var found = sw.some(function(w) {
+            return w.socket === socket
+          })
+
+          if (found) {
+            wrappers = sw
+            break
+          }
+        }
+
+        UNDEF.some(function (wrapper) {
+          if (wrapper.socket === socket) {
+            wrappers = [wrapper]
+            return true
+          }
+        })
+      }
+
+      if (!wrappers) throw new Error('missing socket wrapper')
 
       var args = [].slice.call(arguments)
       args.unshift(event)
-      cached.wrappers.forEach(function(wrapper) {
+      wrappers.forEach(function(wrapper) {
         wrapper._maybeEmit.apply(wrapper, args)
       })
     })
