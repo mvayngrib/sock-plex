@@ -60,13 +60,13 @@ Socket.prototype.bind = function(port, host, cb) {
     host = null
   }
 
+  var cached
   if (!port) {
     socket = newSocket(this._type)
-    socket.once('listening', onPortKnown)
     socket.bind()
   }
   else {
-    var cached = typePorts[port]
+    cached = typePorts[port]
     if (cached) {
       socket = cached.socket
     }
@@ -76,6 +76,15 @@ Socket.prototype.bind = function(port, host, cb) {
     }
 
     onPortKnown(port)
+  }
+
+  if (cached) {
+    if (cached.listening) {
+      process.nextTick(self.emit.bind(self, 'listening'))
+    }
+  }
+  else {
+    socket.once('listening', onListening)
   }
 
   socket.setMaxListeners(0)
@@ -103,7 +112,18 @@ Socket.prototype.bind = function(port, host, cb) {
     if (idx !== -1) UNDEF.splice(idx, 1)
 
     typePorts[port].wrappers.push(self)
-    process.nextTick(self.emit.bind(self, 'listening'))
+  }
+
+  function onListening() {
+    if (!('_port' in self)) onPortKnown()
+
+    var cached = typePorts[self._port]
+    cached.listening = true
+    process.nextTick(function() {
+      cached.wrappers.forEach(function(w) {
+        w.emit('listening')
+      })
+    })
   }
 }
 

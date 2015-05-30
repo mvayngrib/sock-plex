@@ -37,6 +37,29 @@ require('../')
 // test-dgram-unref.js
 // ]
 
+test('port sharing listening', function(t) {
+  var num = 5
+  t.plan(num)
+
+  var sockets = []
+  var port = 12345
+  for (var i = 0; i < num; i++) {
+    var s = dgram.createSocket('udp4')
+    s.bind(port)
+    s.once('listening', done)
+    sockets.push(s)
+  }
+
+  function done() {
+    t.pass()
+    if (--num === 0) {
+      sockets.forEach(function(s) {
+        s.close()
+      })
+    }
+  }
+})
+
 test('port sharing on sending and receiving sides', function(t) {
   var numFrom = 10
   var numTo = 10
