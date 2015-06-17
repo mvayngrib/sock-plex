@@ -1,17 +1,18 @@
 {
-  "name": "sock-share",
+  "name": "sock-plex",
   "version": "0.0.1",
-  "description": "dgram hack to allow multiple sockets on one port to receive all messages there",
+  "description": "dgram hack for multiplexing sockets (multiple sockets on one port)",
   "main": "index.js",
   "scripts": {
     "test": "node test"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mvayngrib/sock-share.git"
+    "url": "git+https://github.com/mvayngrib/sock-plex.git"
   },
   "keywords": [
     "sockets",
+    "multiplex",
     "udp",
     "hack",
     "dgram",
@@ -23,9 +24,9 @@
   "author": "Mark Vayngrib <mark.vayngrib@lablz.com> (http://github.com/mvayngrib)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mvayngrib/sock-share/issues"
+    "url": "https://github.com/mvayngrib/sock-plex/issues"
   },
-  "homepage": "https://github.com/mvayngrib/sock-share#readme",
+  "homepage": "https://github.com/mvayngrib/sock-plex#readme",
   "devDependencies": {
     "tape": "^4.0.0"
   }

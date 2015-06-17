@@ -1,5 +1,9 @@
 # sock-share
 
+_This module is used by [Tradle](https://github.com/tradle/about/wiki)_
+
+Multiplexing dgram sockets
+
 ## Usage
 
 ### Basic
