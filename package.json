@@ -1,5 +1,5 @@
 {
-  "name": "sock-jack",
+  "name": "sock-share",
   "version": "0.0.1",
   "description": "dgram hack to allow multiple sockets on one port to receive all messages there",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mvayngrib/sock-jack.git"
+    "url": "git+https://github.com/mvayngrib/sock-share.git"
   },
   "keywords": [
     "sockets",
@@ -23,9 +23,9 @@
   "author": "Mark Vayngrib <mark.vayngrib@lablz.com> (http://github.com/mvayngrib)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mvayngrib/sock-jack/issues"
+    "url": "https://github.com/mvayngrib/sock-share/issues"
   },
-  "homepage": "https://github.com/mvayngrib/sock-jack#readme",
+  "homepage": "https://github.com/mvayngrib/sock-share#readme",
   "devDependencies": {
     "tape": "^4.0.0"
   }
