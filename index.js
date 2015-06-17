@@ -75,12 +75,14 @@ Socket.prototype.bind = function(port, host, cb) {
       socket.bind(port, host)
     }
 
-    onPortKnown(port)
+    onPortKnowable()
   }
 
   if (cached) {
     if (cached.listening) {
-      process.nextTick(self.emit.bind(self, 'listening'))
+      process.nextTick(function() {
+        if (!self._closing) self.emit('listening')
+      })
     }
   }
   else {
@@ -97,8 +99,8 @@ Socket.prototype.bind = function(port, host, cb) {
 
   if (cb) this.once('listening', cb)
 
-  function onPortKnown(port) {
-    if (typeof port === 'undefined') port = socket.address().port
+  function onPortKnowable() {
+    if (!port) port = socket.address().port
 
     self._port = port
     if (!typePorts[port]) {
@@ -115,13 +117,13 @@ Socket.prototype.bind = function(port, host, cb) {
   }
 
   function onListening() {
-    if (!('_port' in self)) onPortKnown()
+    if (!port) onPortKnowable()
 
-    var cached = typePorts[self._port]
+    var cached = typePorts[port]
     cached.listening = true
     process.nextTick(function() {
       cached.wrappers.forEach(function(w) {
-        w.emit('listening')
+        if (!w._closing) w.emit('listening')
       })
     })
   }
@@ -237,15 +239,3 @@ function newListenersCache() {
 
   return cache
 }
-
-// setInterval(function() {
-//   for (var type in SOCKETS) {
-//     var byType = SOCKETS[type]
-//     for (var port in byType) {
-//       var cache = byType[port]
-//       console.log(cache.wrappers.length, 'wrappers left for', port, cache.wrappers.map(function(w) {
-//         return w._jackid
-//       }).join(', '))
-//     }
-//   }
-// }, 2000)
