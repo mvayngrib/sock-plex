@@ -1,6 +1,6 @@
 {
   "name": "sock-plex",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "dgram hack for multiplexing sockets (multiple sockets on one port)",
   "main": "index.js",
   "scripts": {
