@@ -72,6 +72,7 @@ Socket.prototype.bind = function(port, host, cb) {
     }
     else {
       socket = newSocket(this._type)
+      socket.once('listening', onListening)
       socket.bind(port, host)
     }
 
@@ -84,9 +85,6 @@ Socket.prototype.bind = function(port, host, cb) {
         if (!self._closing) self.emit('listening')
       })
     }
-  }
-  else {
-    socket.once('listening', onListening)
   }
 
   socket.setMaxListeners(0)
