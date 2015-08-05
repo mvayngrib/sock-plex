@@ -179,7 +179,7 @@ Socket.prototype._filterMessages = function(msg, rinfo) {
   })
 }
 
-;['address'].forEach(function(method) {
+;['address', 'unref', 'ref'].forEach(function(method) {
   Socket.prototype[method] = function() {
     return this.socket[method].apply(this.socket, arguments)
   }
