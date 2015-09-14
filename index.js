@@ -103,12 +103,7 @@ Socket.prototype.bind = function(port, host, cb) {
     if (!port) port = socket.address().port
 
     self._port = port
-    if (!typePorts[port]) {
-      typePorts[port] = {
-        socket: socket,
-        wrappers: []
-      }
-    }
+    var cached = getCache()
 
     var idx = UNDEF.indexOf(self)
     if (idx !== -1) UNDEF.splice(idx, 1)
@@ -119,13 +114,17 @@ Socket.prototype.bind = function(port, host, cb) {
   function onListening() {
     if (!port) onPortKnowable()
 
-    var cached = typePorts[port]
+    var cached = getCache()
     cached.listening = true
     process.nextTick(function() {
       cached.wrappers.forEach(function(w) {
         if (!w._closing) w.emit('listening')
       })
     })
+  }
+
+  function getCache () {
+    return typePorts[port] = typePorts[port] || newWrapper(socket)
   }
 }
 
@@ -137,7 +136,10 @@ Socket.prototype.close =  function() {
   var cached = SOCKETS[this._type][this._port]
   if (cached) {
     cached.wrappers.splice(cached.wrappers.indexOf(this), 1)
-    if (!cached.wrappers.length) cached.socket.close()
+    if (!cached.wrappers.length) {
+      cached.socket.close()
+      delete SOCKETS[this._type][this._port]
+    }
   }
   else this.socket.close()
 
@@ -238,4 +240,11 @@ function newListenersCache() {
   })
 
   return cache
+}
+
+function newWrapper (socket) {
+  return {
+    socket: socket,
+    wrappers: []
+  }
 }

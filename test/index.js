@@ -2,7 +2,7 @@
 var fs = require('fs')
 var path = require('path')
 var test = require('tape')
-var bufferEqual = require('buffer-equal')
+// var bufferEqual = require('buffer-equal')
 var dgram = require('dgram')
 require('../')
 
